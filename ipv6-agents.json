@@ -1,12 +1,4 @@
 {
-  "variables": {
-    "kubectl_version": "1.25.3",
-    "kind_version": "0.17.0",
-    "helm_version": "3.11.1",
-    "stern_version": "1.23.0",
-    "yq_version": "4.31.2",
-    "mvn_version": "3.9.5"
-  },
   "builders": [
     {
       "type": "googlecompute",
@@ -19,6 +11,7 @@
       "ssh_username": "root",
       "use_internal_ip": true,
       "omit_external_ip": true,
+      "service_account_email": "packer-builder@cloudbees-gauntlet.iam.gserviceaccount.com",
       "tags": ["cloudnat-us-east1"],
       "image_storage_locations": ["us-east1"]
     }
@@ -26,8 +19,23 @@
   "provisioners": [
     {
       "type": "file",
-      "source": "check-environment.sh",
-      "destination": "/tmp/check-environment.sh"
+      "source": "daemon.json",
+      "destination": "/tmp/daemon.json"
+    },
+    {
+      "type": "file",
+      "source": "Dockerfile.dind",
+      "destination": "/tmp/Dockerfile.dind"
+    },
+    {
+      "type": "file",
+      "source": "Dockerfile.jnlp",
+      "destination": "/tmp/Dockerfile.jnlp"
+    },
+    {
+      "type": "file",
+      "source": "docker-ipv6-entrypoint.sh",
+      "destination": "/tmp/docker-ipv6-entrypoint.sh"
     },
     {
       "type": "file",
@@ -37,33 +45,22 @@
     {
       "type": "shell",
       "inline": [
-        "rm -rf /var/lib/apt/lists/*",
         "apt-get update",
-        "apt-get install -y ca-certificates curl git gnupg lsb-release make unzip",
+        "apt-get install -y ca-certificates curl gnupg lsb-release net-tools linux-modules-extra-$(uname -r)",
         "mkdir -m 0755 -p /etc/apt/keyrings",
         "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg",
         "echo deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable | tee /etc/apt/sources.list.d/docker.list > /dev/null",
         "apt-get update",
-        "apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin openjdk-11-jdk-headless",
-        "curl -sSLo /usr/local/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v{{user `kubectl_version`}}/bin/linux/$(dpkg --print-architecture)/kubectl",
-        "chmod +x /usr/local/bin/kubectl",
-        "curl -sSLo /usr/local/bin/kind https://kind.sigs.k8s.io/dl/v{{user `kind_version`}}/kind-linux-$(dpkg --print-architecture)",
-        "chmod +x /usr/local/bin/kind",
-        "curl -sSL https://get.helm.sh/helm-v${{user `helm_version`}}-linux-$(dpkg --print-architecture).tar.gz | tar -xz -C /usr/local/bin --strip-components 1 --wildcards */helm",
-        "curl -sSL https://github.com/stern/stern/releases/download/v${{user `stern_version`}}/stern_${{user `stern_version`}}_linux_$(dpkg --print-architecture).tar.gz | tar -xz -C /usr/local/bin",
-        "curl -sSLo /usr/bin/yq https://github.com/mikefarah/yq/releases/download/${{user `yq_version`}}/yq_linux_$(dpkg --print-architecture) && chmod +x /usr/bin/yq",
-        "curl https://dl.google.com/dl/cloudsdk/release/google-cloud-sdk.tar.gz > /tmp/google-cloud-sdk.tar.gz",
-        "mkdir -p /usr/local/gcloud",
-        "tar -C /usr/local/gcloud -xvf /tmp/google-cloud-sdk.tar.gz",
-        "/usr/local/gcloud/google-cloud-sdk/install.sh",
-        "export PATH=$PATH:/usr/local/gcloud/google-cloud-sdk/bin",
-        "curl -fsSL -o /tmp/apache-maven.tar.gz https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/{{user `mvn_version`}}/apache-maven-{{user `mvn_version`}}-bin.tar.gz",
-        "echo '4a5afb8ef6c1ee6f08b764b190509c3e9825be1f /tmp/apache-maven.tar.gz' | sha1sum -c - ",
-        "tar -xzf /tmp/apache-maven.tar.gz -C /usr/share/maven --strip-components=1",
-        "rm -f /tmp/apache-maven.tar.gz",
-        "ln -s /usr/share/maven/bin/mvn /usr/bin/mvn",
-        "/tmp/check-environment.sh"
-        "docker compose up -d"
+        "apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin",
+        "gcloud auth configure-docker us-east1-docker.pkg.dev --quiet",
+        "cp -a /tmp/daemon.json .",
+        "cp -a /tmp/Dockerfile.jnlp .",
+        "cp -a /tmp/Dockerfile.dind .",
+        "cp -a /tmp/docker-ipv6-entrypoint.sh .",
+        "cp -a /tmp/docker-compose.yml .",
+        "docker compose build",
+        "docker compose up -d",
+        "ifconfig"
       ]
     }
   ]

@@ -1,16 +1,19 @@
 pipeline {
   agent {
     kubernetes {
+      label 'agent-label-' + UUID.randomUUID().toString()
+      inheritFrom 'default'
+      cloud 'kubernetes'
       yaml """
 apiVersion: v1
 kind: Pod
 metadata:
-  name: ops-packer-jenkins-agents
+  name: packer-builder
 spec:
   serviceAccountName: packer-builder
   containers:
   - name: packer
-    image: us-east1-docker.pkg.dev/cloudbees-artifact-registry/common/packer-builder:packer-builder-4
+    image: us-east1-docker.pkg.dev/cloudbees-artifact-registry/common/packer-builder:packer-builder-14
     command:
     - /usr/bin/cat
     tty: true
@@ -38,7 +41,7 @@ spec:
             sh 'packer build -on-error=cleanup ipv6-agents.json | tee output.txt'
             script {
               def out = sh (
-                script: 'tail -n 1  output.txt | cut -d ':' -f 3 | xargs echo',
+                script: 'tail -n 1 output.txt | cut -d ":" -f 3 | xargs echo',
                 returnStdout: true
               ).trim()
                 currentBuild.description = out

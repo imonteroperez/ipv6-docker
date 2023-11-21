@@ -1,96 +1,56 @@
-version: "2"
+version: '3.8'
+
+volumes:
+  micro-dns-service:
 
 networks:
-      ip6net:
-        enable_ipv6: true
-        ipam:
-          config:
-            - subnet: "2600:1900:4020:cd9b:0:0:0:0/64"
-        x-service-ipv6: &service-ipv6
-          networks:
-            - ip6net
-          user: "root"
-          cap_add:
-            - NET_ADMIN
+  ip6net:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: "2600:1900:4020:cd9b:0:0:0:0/64"
+
+x-service-ipv6: &service-ipv6
+  networks:
+    - ip6net
+  user: "root"
+  cap_add:
+    - NET_ADMIN
+    - SYS_MODULE
+  volumes:
+    - &micro-dns-service-volume micro-dns-service:/micro-dns-service
 
 services:
-  
-  proxy:
+  jnlp:
     <<: *service-ipv6
-    container_name: cjp.local
-    #https://hub.docker.com/_/nginx/
-    image: nginx:1.10-alpine
-    ports:
-      - "80:80"
-      #- "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx:ro
-      - ./nginx/logs:/var/log/nginx
-    depends_on: #to force proxy to start after:
-      - cjoc
-      - controller 
-      - agent
-
-  cjoc:
-    <<: *service-ipv6
-    container_name: cjoc
-    #https://hub.docker.com/r/cloudbees/jenkins-operations-center/
-    image: cloudbees/cloudbees-core-oc:2.426.1.2
+    container_name: jnlp
+    build:
+      dockerfile: Dockerfile.jnlp
+    command:
+      - "/bin/bash"
+      - "-c"
+      - |
+        sh /var/jenkins_config/jenkins-agent
     environment:
-      JENKINS_SLAVE_AGENT_PORT: "50000"
-      JENKINS_HA: "false"
-      #https://wiki.jenkins-ci.org/display/JENKINS/Features+controlled+by+system+properties
-      JAVA_OPTS: "
-        -Dhudson.TcpSlaveAgentListener.hostName=cjoc
-        -Dhudson.TcpSlaveAgentListener.port=50000
-        -Dhudson.udp=-1
-        -Dhudson.DNSMultiCast.disabled=true
-        -Djava.awt.headless=true
-        -Dorg.apache.commons.jelly.tags.fmt.timeZone=America/New_York"
-      JENKINS_OPTS: "--prefix=/cjoc"
+      HOME: "/root"
     volumes:
-      - ./data/cjoc:/var/jenkins_home
-      - ./data/backups:/backups
-
-  controller:
+      - *micro-dns-service-volume
+      - /var/run:/var/run
+      - /root/.docker:/root/.docker
+      - /var/lib/docker:/var/lib/docker
+      - /var/jenkins_config:/var/jenkins_config
+      - /lib/modules:/lib/modules
+  docker-daemon:
     <<: *service-ipv6
-    container_name: controller
-    #https://hub.docker.com/r/cloudbees/jenkins-enterprise/
-    image: cloudbees/cloudbees-core-cm:2.426.1.2
-    environment:
-      JENKINS_SLAVE_AGENT_PORT: "50000"
-      JENKINS_HA: "false"
-      JAVA_OPTS: "
-        -Dhudson.TcpSlaveAgentListener.hostName=controller
-        -Dhudson.TcpSlaveAgentListener.port=50000
-        -Dhudson.udp=-1
-        -Dhudson.DNSMultiCast.disabled=true
-        -Djava.awt.headless=true
-        -Dorg.apache.commons.jelly.tags.fmt.timeZone=America/New_York
-        "
-      JENKINS_OPTS: "--prefix=/cje-prod"
-    volumes:
-      - ./data/controller:/var/jenkins_home
-      - ./data/backups:/backups
-    volumes_from:
-      - agent
-
-  agent:
-    <<: *service-ipv6
-    container_name: agent
-    image: cloudbees/cloudbees-core-agent:2.426.1.2
-    #this part is specific to your environment.. see README
-    command: ["${SSH_AGENT_COMMAND}"]
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock #aka "docker socket volume mapping"
-
-  #https://hub.docker.com/r/verb/socat/
-  #clever way to expose host docker engine to internal services
-  docker-service:
-    container_name: docker-service
-    image: verb/socat:alpine
-    command: tcp-listen:2375,reuseaddr,fork unix:/docker.sock
+    container_name: docker-daemon
+    build:
+      dockerfile: Dockerfile.dind
+    privileged: true
+    command: dockerd
     expose:
       - "2375"
     volumes:
-      - /var/run/docker.sock:/docker.sock
+      - *micro-dns-service-volume
+      - /var/run:/var/run
+      - /root/.docker:/root/.docker
+      - /lib/modules:/lib/modules

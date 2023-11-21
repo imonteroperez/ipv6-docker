@@ -1,0 +1,5 @@
+FROM docker:24.0.7-dind@sha256:1dfc375736e448806602211e09a9b1390eb110548dcb839eef374da357ca5f5d
+
+USER root
+
+COPY daemon.json /etc/docker/

@@ -1,0 +1,21 @@
+FROM us-east1-docker.pkg.dev/cloudbees-artifact-registry/cbci/rosie/pse-ath-runner:4bc3a3ff78b12ce0dd1f5437e6ea6bf6
+
+USER root
+
+# Controls whether ipv4 should be available in containers
+ENV ALLOW_IPV4=0
+# Controls whether ipv4 address on the loopback interface (`127.0.0.1`) should be available in containers
+ENV ALLOW_LO_IPV4=0
+# Controls whether hostnames or ip addresses should be configured to communicate with each other
+ENV ALLOW_HOSTNAMES=1
+# Controls whether ipv6 DNS address(es) is available for containers
+ENV ALLOW_DNS_IPV6=1
+# Controls whether ipv4 DNS address(es) (usually: `127.0.0.x`) is available for containers (in `/etc/resolv.conf`)
+ENV ALLOW_DNS_IPV4=0
+
+RUN apt-get update \
+  && apt-get install -y net-tools iproute2 \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --chmod=0755 docker-ipv6-entrypoint.sh /
+ENTRYPOINT ["/docker-ipv6-entrypoint.sh"]
